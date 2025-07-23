@@ -2,11 +2,38 @@
 #!/bin/bash
 
 # --- INSTRUCTIONS ---
+#  Connect to the Internet: If you are using Wi-Fi, you'll need to connect to it first. You can use the iwctl
+#      utility for this.
+#
+#     # Start the interactive prompt
+#     iwctl
+#
+#     # List your Wi-Fi devices (e.g., wlan0)
+#     device list
+#
+#     # Scan for networks
+#     station <device_name> scan
+#
+#     # List available networks
+#     station <device_name> get-networks
+#
+#     # Connect to your network
+#     station <device_name> connect "Your_SSID"
+#
+#     # Type your password when prompted, then type 'exit'
+#
+#
+#    NOTE: Or directly execute this
+#
+#    iwctl --passphrase passphrase station name connect SSID
+#
+#     NOTE: more on the topic could be found here https://wiki.archlinux.org/title/Iwd#iwctl
 #
 # This script interactively automates a clean installation of Arch Linux.
 # It is designed to be run on a pre-partitioned disk.
 #
 # USAGE:
+# 0. pacman -Sy wget
 #
 # 1. From the Arch Linux live environment, download the script (replace with your actual URL):
 #    wget https://raw.githubusercontent.com/bdryanovski/arch/main/setup.sh
@@ -32,8 +59,9 @@ echo "--- Arch Linux Interactive Installer ---"
 echo "Please provide the following information."
 
 # Get partition info
-read -p "Enter the EFI System Partition path (e.g., /dev/sda1 or /dev/nvme0n1p1): " EFI_PARTITION
-read -p "Enter the Linux Root Partition path (e.g., /dev/sda2 or /dev/nvme0n1p3): " ROOT_PARTITION
+read -p "Enter the EFI System Partition path (e.g., /dev/sda1 or /dev/nvme0n1p5): " EFI_PARTITION
+read -p "Enter the Linux Root Partition path (e.g., /dev/sda2 or /dev/nvme0n1p7): " ROOT_PARTITION
+read -p "Enter the Swap Partition path (/dev/nvme0n1p6): " SWAP_PARTITION
 
 # Get system info
 read -p "Enter the desired hostname for the new system: " HOSTNAME
@@ -62,6 +90,7 @@ echo "---"
 echo "Configuration complete. The following partitions will be FORMATTED:"
 echo "  - EFI:   $EFI_PARTITION"
 echo "  - Root:  $ROOT_PARTITION"
+echo "  - Swap:  $SWAP_PARTITION (if specified)"
 echo
 read -p "WARNING: All data on these partitions will be lost. Are you sure you want to continue? (yes/no): " CONFIRM_FORMAT
 if [ "$CONFIRM_FORMAT" != "yes" ]; then
@@ -78,6 +107,7 @@ echo "Starting Arch Linux installation..."
 # Format the partitions
 echo "Formatting partitions..."
 mkfs.fat -F32 "${EFI_PARTITION}"
+mkswap "${SWAP_PARTITION}"
 mkfs.ext4 "${ROOT_PARTITION}"
 
 # Mount the partitions
@@ -86,9 +116,14 @@ mount "${ROOT_PARTITION}" /mnt
 mkdir -p /mnt/boot
 mount "${EFI_PARTITION}" /mnt/boot
 
+swapon "${SWAP_PARTITION}"
+
 # Install the base system
 echo "Installing base system (this may take a while)..."
-pacstrap /mnt base linux linux-firmware base-devel
+pacstrap -K /mnt base linux linux-firmware base-devel
+
+echo "Installation bonus packages..."
+pacstrap -K /mnt vim networkmanager texinfo grub os-prober efibootmgr dosfstools mtools base-devel git sudo intel-ucode
 
 # Generate fstab
 echo "Generating fstab..."
@@ -99,7 +134,7 @@ echo "Entering chroot and configuring the system..."
 arch-chroot /mnt <<EOF
 
 # Set the time zone
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+ln -sf /usr/share/zoneinfo/Europe/Sofia /etc/localtime
 hwclock --systohc
 
 # Set the locale
