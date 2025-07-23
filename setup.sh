@@ -54,6 +54,14 @@
 # ---
 
 # --- Interactive Configuration ---
+echo "Detecting Wi-Fi interface..."                                                             │
+# Find the first wireless interface (usually starts with 'w')                                   │
+WIFI_INTERFACE=$(ls /sys/class/net | grep '^w' | head -n 1)                                     │
+  if [ -z "$WIFI_INTERFACE" ]; then                                                               │
+  echo "Could not find a Wi-Fi interface. Aborting."                                          │
+ │exit 1                                                                                      │
+  fi                                                                                              │
+echo "Found Wi-Fi interface: ${WIFI_INTERFACE}"                                                 │
 
 echo "--- Arch Linux Interactive Installer ---"
 echo "Please provide the following information."
@@ -157,7 +165,7 @@ echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 pacman -S --noconfirm --needed wpa_supplicant neovim git
 
 # Configure Wi-Fi
-cat > /etc/wpa_supplicant/wpa_supplicant-wlan0.conf <<EOT
+cat > /etc/wpa_supplicant/wpa_supplicant-${WIFI_INTERFACE}.conf <<EOT
 ctrl_interface=/run/wpa_supplicant
 update_config=1
 
@@ -169,14 +177,14 @@ EOT
 
 cat > /etc/systemd/network/25-wireless.network <<EOT
 [Match]
-Name=wlan0
+Name=${WIFI_INTERFACE}
 
 [Network]
 DHCP=yes
 EOT
 
 # Enable network services
-systemctl enable wpa_supplicant@wlan0.service
+systemctl enable wpa_supplicant@${WIFI_INTERFACE}.service
 systemctl enable systemd-networkd.service
 
 # Configure Bootloader
