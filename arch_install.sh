@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # --- INSTRUCTIONS ---
@@ -36,13 +35,13 @@
 # 0. pacman -Sy wget
 #
 # 1. From the Arch Linux live environment, download the script (replace with your actual URL):
-#    wget https://raw.githubusercontent.com/bdryanovski/arch/main/setup.sh
+#    wget https://raw.githubusercontent.com/bdryanovski/arch/main/arch_install.sh
 #
 # 2. Make the script executable:
-#    chmod +x setup.sh
+#    chmod +x arch_install.sh
 #
 # 3. Run the script. It will prompt you for all necessary information:
-#    ./setup.sh
+#    ./arch_install.sh
 #
 # --- WARNINGS ---
 #
@@ -54,14 +53,14 @@
 # ---
 
 # --- Interactive Configuration ---
-echo "Detecting Wi-Fi interface..."                                                             │
-# Find the first wireless interface (usually starts with 'w')                                   │
-WIFI_INTERFACE=$(ls /sys/class/net | grep '^w' | head -n 1)                                     │
-  if [ -z "$WIFI_INTERFACE" ]; then                                                               │
-  echo "Could not find a Wi-Fi interface. Aborting."                                          │
- │exit 1                                                                                      │
-  fi                                                                                              │
-echo "Found Wi-Fi interface: ${WIFI_INTERFACE}"                                                 │
+echo "Detecting Wi-Fi interface..."
+# Find the first wireless interface (usually starts with 'w')
+WIFI_INTERFACE=$(ls /sys/class/net | grep '^w' | head -n 1)
+  if [ -z "$WIFI_INTERFACE" ]; then
+    echo "Could not find a Wi-Fi interface. Aborting."
+ │exit 1
+  fi
+echo "Found Wi-Fi interface: ${WIFI_INTERFACE}"
 
 echo "--- Arch Linux Interactive Installer ---"
 echo "Please provide the following information."
@@ -84,6 +83,11 @@ while true; do
     [ "$PASSWORD" = "$PASSWORD_CONFIRM" ] && break
     echo "Passwords do not match. Please try again."
 done
+
+
+# Generate a UUID for the network connection
+echo "Generating UUID for the network connection..."
+CONNECTION_UUID=$(cat /proc/sys/kernel/random/uuid)
 
 # Get Wi-Fi info
 read -p "Enter your Wi-Fi network name (SSID): " WIFI_SSID
@@ -131,7 +135,7 @@ echo "Installing base system (this may take a while)..."
 pacstrap -K /mnt base linux linux-firmware base-devel
 
 echo "Installation bonus packages..."
-pacstrap -K /mnt vim networkmanager texinfo grub os-prober efibootmgr dosfstools mtools base-devel git sudo intel-ucode
+pacstrap -K /mnt vim networkmanager texinfo grub os-prober efibootmgr dosfstools mtools base-devel git sudo
 
 # Generate fstab
 echo "Generating fstab..."
@@ -162,30 +166,39 @@ echo "${USERNAME}:${PASSWORD}" | chpasswd
 echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
 # Install necessary packages
-pacman -S --noconfirm --needed wpa_supplicant neovim git
+pacman -S --noconfirm --needed neovim git
 
-# Configure Wi-Fi
-cat > /etc/wpa_supplicant/wpa_supplicant-${WIFI_INTERFACE}.conf <<EOT
-ctrl_interface=/run/wpa_supplicant
-update_config=1
+# Create a pre-configured Wi-Fi connection for NetworkManager
+echo "Configuring NetworkManager..."
+cat > /etc/NetworkManager/system-connections/default-wifi.nmconnection <<EOT
+[connection]
+id=Default Wi-Fi
+uuid=${CONNECTION_UUID}
+type=wifi
+interface-name=${WIFI_INTERFACE}
 
-network={
-    ssid="${WIFI_SSID}"
-    psk="${WIFI_PASSWORD}"
-}
+[wifi]
+mode=infrastructure
+ssid=${WIFI_SSID}
+
+[wifi-security]
+auth-alg=open
+key-mgmt=wpa-psk
+psk=${WIFI_PASSWORD}
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
 EOT
 
-cat > /etc/systemd/network/25-wireless.network <<EOT
-[Match]
-Name=${WIFI_INTERFACE}
+# Set correct permissions for the connection file
+chmod 600 /etc/NetworkManager/system-connections/default-wifi.nmconnection
 
-[Network]
-DHCP=yes
-EOT
+# Enable NetworkManager service
+systemctl enable NetworkManager.service
 
-# Enable network services
-systemctl enable wpa_supplicant@${WIFI_INTERFACE}.service
-systemctl enable systemd-networkd.service
 
 # Configure Bootloader
 if [ "${SETUP_DUAL_BOOT}" = "yes" ]; then
